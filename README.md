@@ -21,7 +21,7 @@ TypoWay utilizes the `dedoc/scramble` package to analyze Laravel routes and extr
 Install the package via Composer:
 
 ```sh
-composer require emhashef/typoway
+composer require emhashef/typoway --dev
 ```
 
 ## Usage
