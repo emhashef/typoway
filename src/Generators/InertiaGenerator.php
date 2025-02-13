@@ -42,6 +42,17 @@ class InertiaGenerator implements GeneratorInterface
                 $requestType = $this->requestTypeExtractor->extract($route),
             );
 
+            $filesManager->addReference(
+                str($route->getName())
+                    ->slug(".")
+                    ->replace(".", " ")
+                    ->headline()
+                    ->replace(" ", "")
+                    ->append('Response'),
+
+                $responseType,
+            );
+
             $this->utils->buildNestedStructureForJavascript(
                 $formsStructure,
                 $route->getName(),
