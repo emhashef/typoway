@@ -13,8 +13,7 @@ class InertiaGenerator implements GeneratorInterface
         protected Utils $utils,
         protected RequestTypeExtractor $requestTypeExtractor,
         protected ResponseTypeExtractor $responseTypeExtractor,
-    ) {
-    }
+    ) {}
 
     public function generate(RoutesFiles $filesManager, array $routes): void
     {
@@ -38,7 +37,7 @@ class InertiaGenerator implements GeneratorInterface
                     ->replace(".", " ")
                     ->headline()
                     ->replace(" ", "")
-                    ->append('Form'),
+                    ->append("Form"),
                 $requestType = $this->requestTypeExtractor->extract($route),
             );
 
@@ -48,7 +47,7 @@ class InertiaGenerator implements GeneratorInterface
                     ->replace(".", " ")
                     ->headline()
                     ->replace(" ", "")
-                    ->append('Response'),
+                    ->append("Response"),
 
                 $responseType,
             );
@@ -57,25 +56,25 @@ class InertiaGenerator implements GeneratorInterface
                 $formsStructure,
                 $route->getName(),
                 sprintf(
-                    "(%s data?: %s, options?: FormOptions): FormResponse<%s> => useForm<%s>(%s(%s %s), '%s', %s, options)",
+                    "(%s%s data?: %s|FormOptions, options?: FormOptions) => useForm<%s>(%s, '%s', %s %s data, options)",
 
-                    $requiredArgs = $this->utils->getRequiredParametersAsArgument($route),
-                    $reqTypeRef,
+                    collect($requiredArgs = $this->utils->getRequiredParameters($route))
+                        ->map(fn($name) => (string) str($name)->append("?: string|$reqTypeRef|FormOptions"))
+                        ->join(",") . ($requiredArgs ? ',' : ''),
+                    collect($optionalParams = $this->utils->getOptionalParameters($route))
+                        ->map(fn($name) => (string) str($name)->append("?: string|$reqTypeRef|FormOptions"))
+                        ->join(",") . ($optionalParams ? ',' : ''),
+                    // $reqTypeRef,
                     $reqTypeRef,
                     $reqTypeRef,
                     // $optionalArgs = $this->utils->getOptionalParametersAsArgument($route),
                     $url = $this->utils->getUrlAccessor($route),
-                    join(",", $pars = $this->utils->getRequiredParameters($route)) .
-                        ($pars ? "," : ""),
-                    join(
-                        ",",
-                        array_map(
-                            fn($i) => "options?.params?." . $i,
-                            $this->utils->getOptionalParameters($route),
-                        ),
-                    ),
+
                     $method = $this->utils->getMethod($route),
-                    "Object.assign(" . $requestType->toObj(true) . ", data)",
+                    join(",", $requiredArgs) .
+                        ($requiredArgs ? "," : ""),
+                    join(",", $optionalParams) .
+                        ($optionalParams ? "," : ""),
                 ),
             );
 
@@ -84,7 +83,7 @@ class InertiaGenerator implements GeneratorInterface
                 $route->getName(),
                 sprintf(
                     "(%s data?: %s, options?: FormOptions) => router.%s(%s(%s %s), %s, %s)",
-                    $requiredArgs,
+                    collect($requiredArgs)->map(fn($name) => (string) str($name)->append("?: string"))->join(",") . ($requiredArgs ? ',' : ''),
                     $reqTypeRef,
                     // $optionalArgs,
                     $method,
@@ -125,7 +124,7 @@ class InertiaGenerator implements GeneratorInterface
 
         export type FormResponse<T extends object> = {
             errors: { [key in keyof T]?: string | string[] };
-            submit(_options?: Partial<VisitOptions>): void;
+            submit(...args): void;
         } & InertiaForm<T>;
 
         export type FormOptions = Partial<VisitOptions & {params: {[x: string]: string}}>
@@ -133,15 +132,23 @@ class InertiaGenerator implements GeneratorInterface
         export function useForm<T extends object>(
             url,
             method: Method = "post",
-            data: T = {} as T,
-            options?: Partial<VisitOptions>,
+            ...args
         ): FormResponse<T> {
+            const params = args.filter(v => typeof v !== 'object');
+            const _ = args.filter(v => typeof v === 'object');
+            const data = _[0] ?? {};
+            const options = _[1] ?? {};
+
             const form = inertiaUseForm(data);
             const inertiaSubmit = form.submit.bind(form);
             return Object.assign(form, {
-                submit: async (_options?: Partial<VisitOptions>) => {
-                    const response = await inertiaSubmit(method, url, { ...options, ..._options });
-                    return response;
+                submit: (..._args) => {
+                    const _params = _args.filter(v => typeof v !== 'object');
+                    const _options = _args.filter(v => typeof v === 'object')[0] ?? {};
+
+                    return inertiaSubmit(method, url(..._params.concat(...params.slice(_params.length))), { 
+                        ...options, ..._options
+                    });
                 },
             });
         }
