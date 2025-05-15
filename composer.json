@@ -5,7 +5,7 @@
     "require": {
         "php": "^8.1",
         "spatie/invade": "^2.1",
-        "dedoc/scramble": "^0.11.23",
+        "dedoc/scramble": "^0.12",
         "illuminate/support": "^10.0|^11.0|^12.0"
     },
     "autoload": {
