@@ -10,9 +10,7 @@ use Emhashef\Typoway\Support\Utils;
 
 class UrlsGenerator implements GeneratorInterface
 {
-    public function __construct(protected Utils $utils)
-    {
-    }
+    public function __construct(protected Utils $utils) {}
 
     /**
      * @param \Illuminate\Routing\Route[] $routes
@@ -29,17 +27,22 @@ class UrlsGenerator implements GeneratorInterface
                 $structure,
                 $route->getName(),
                 sprintf(
-                    "(%s %s) => `%s`",
-                    $this->utils->getRequiredParametersAsArgument($route),
-                    $this->utils->getOptionalParametersAsArgument($route),
+                    "(%s) => `%s`",
+                    join(
+                        ", ",
+                        array_map(
+                            fn($param) => "$param?: string",
+                            $this->utils->getParameters($route),
+                        ),
+                    ),
                     str($this->utils->getUrl($route))->replace(
                         array_map(
-                            fn($p) => '{' . $p . '}',
-                            $this->utils->getOptionalParameters($route)
+                            fn($p) => "{" . $p . "}",
+                            $this->utils->getParameters($route),
                         ),
                         array_map(
-                            fn($p) => '{' . "$p || _default('$p')" . '}',
-                            $this->utils->getOptionalParameters($route),
+                            fn($p) => "{" . "$p ?? _default('$p')" . "}",
+                            $this->utils->getParameters($route),
                         ),
                     ),
                 ),
@@ -49,22 +52,14 @@ class UrlsGenerator implements GeneratorInterface
                 $matches,
                 $route->getName(),
                 "() => window.location.pathname.match(" .
-                    $this->utils->convertPCREToJS(
-                        $route->toSymfonyRoute()->compile()->getRegex(),
-                    ) .
+                    $this->utils->convertPCREToJS($route->toSymfonyRoute()->compile()->getRegex()) .
                     ")",
             );
         }
 
-        $filesManager->addExport(
-            "matches",
-            $this->utils->buildJavascriptObject($matches, true),
-        );
+        $filesManager->addExport("matches", $this->utils->buildJavascriptObject($matches, true));
 
-        $filesManager->addExport(
-            "urls",
-            $this->utils->buildJavascriptObject($structure, true),
-        );
+        $filesManager->addExport("urls", $this->utils->buildJavascriptObject($structure, true));
     }
 
     public function prerequisite(): string

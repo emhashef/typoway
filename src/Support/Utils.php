@@ -36,6 +36,19 @@ class Utils
         return rtrim($ts, ",\n") . "\n}";
     }
 
+    public function getParameters(Route $route)
+    {
+        return str($route->uri())
+            ->matchAll("/\{(\w+?)\?\}/")
+            ->map(
+                fn($parameter) => (string) str($parameter)
+                    ->replace("export", "_export")
+                    ->replace("import", "_import"),
+            )
+            ->reverse()
+            ->toArray();
+    }
+
     public function getRequiredParameters(Route $route)
     {
         return str($route->uri())
@@ -74,6 +87,7 @@ class Utils
                     ->replace("export", "_export")
                     ->replace("import", "_import"),
             )
+            ->reverse()
             ->toArray();
     }
 
