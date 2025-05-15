@@ -59,7 +59,7 @@ class ApiGenerateTest extends TestCase
         $this->assertFileExists(resource_path("js/routes.ts"));
 
         $this->assertStringContainsString(
-            "index: ( data?: {name?: string}, ): ApiResponse<{name?: string}> => request('get', urls.test.index( ), data)",
+            "index: ( data?: {name?: any}, ): ApiResponse<{name?: string}> => request('get', urls.test.index( ), data)",
             file_get_contents(resource_path("js/routes.ts"))
         );
     }
