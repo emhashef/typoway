@@ -105,7 +105,10 @@ class ResponseTypeExtractor
 
             $references = array_merge($references, $refs);
             $ts = new ArrayTs($nestedTs);
-        } elseif ($type instanceof StringType) {
+        } elseif ($type instanceof UnknownType) {
+            $ts = new StrictTs("any");
+        } 
+         elseif ($type instanceof StringType) {
             if (!empty($type->enum)) {
                 $ts = new AnyofTs(
                     collect($type->enum)

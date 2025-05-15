@@ -132,7 +132,7 @@ class RequestTypeExtractor
 
         return collect($result)
             ->filter()
-            ->mapWithKeys(fn($value) => [$value => new StrictTs("string")])
+            ->mapWithKeys(fn($value) => [$value => new StrictTs("any")])
             ->toArray();
     }
 
