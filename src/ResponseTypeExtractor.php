@@ -2,19 +2,10 @@
 
 namespace Emhashef\Typoway;
 
-use Dedoc\Scramble\Support\Generator\Combined\AnyOf;
-use Dedoc\Scramble\Support\Generator\Response;
-use Dedoc\Scramble\Support\Generator\TypeTransformer;
-use Dedoc\Scramble\Support\RouteInfo;
-use Dedoc\Scramble\Support\Type\Union;
 use Dedoc\Scramble\Generator;
-use Dedoc\Scramble\Support\Generator\Parameter;
-use Dedoc\Scramble\Support\Generator\Reference;
-
+use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\Types\ArrayType;
 use Dedoc\Scramble\Support\Generator\Types\BooleanType;
-use Dedoc\Scramble\Support\Generator\Types\MixedType;
-use Dedoc\Scramble\Support\Generator\Types\NullType;
 use Dedoc\Scramble\Support\Generator\Types\NumberType;
 use Dedoc\Scramble\Support\Generator\Types\ObjectType;
 use Dedoc\Scramble\Support\Generator\Types\StringType;
@@ -22,114 +13,120 @@ use Dedoc\Scramble\Support\Generator\Types\Type;
 use Emhashef\Typoway\Support\TsTypes\ArrayTs;
 use Emhashef\Typoway\Support\TsTypes\ObjectTs;
 use Emhashef\Typoway\Support\TsTypes\StrictTs;
-use Emhashef\Typoway\Support\TsTypes\AnyofTs;
 use Emhashef\Typoway\Support\TsTypes\TsType;
 use Illuminate\Routing\Route;
 
 class ResponseTypeExtractor
 {
-    public function __construct(protected TypeTransformer $typeTransformer)
-    {
-    }
+    protected array $openApi;
 
+    public function __construct(protected Generator $scrambleGenerator) {}
 
     public function extract(Route $route): array
     {
-        $route = app(RouteInfo::class, ["route" => $route]);
-        $returnType = $route->getReturnType();
+        $this->openApi ??= $this->scrambleGenerator->__invoke();
 
-        if (!$returnType) {
+        $path = (string) str(ltrim($route->uri(), '/'))->replaceFirst(ltrim(config('scramble.api_path', 'api'), '/'), '')->ltrim('/')->prepend('/');
+        $method = strtolower($route->methods()[0]);
+        
+        if (!isset($this->openApi['paths'][$path][$method])) {
             return [[], new StrictTs("any")];
         }
-
-        $returnTypes = $returnType instanceof Union ? $returnType->types : [$returnType];
-
-        $responses = collect($returnTypes)
-            ->map($this->typeTransformer->toResponse(...))
-            ->filter()
-            ->filter(fn($response) => $response instanceof Response)
-            ->filter(
-                fn(Response $response) => $response->code == 200 &&
-                    isset($response->content["application/json"]),
-            )
-            ->values();
-
-        if (!$responses->first()) {
+        
+        $operation = $this->openApi['paths'][$path][$method];
+        $responses = $operation['responses'] ?? [];
+        
+        // Get the 200 response schema
+        $successResponse = $responses['200'] ?? $responses['default'] ?? null;
+        if (!$successResponse) {
             return [[], new StrictTs("any")];
         }
-
-        return $this->generateTsFromScrambleType(
-            $responses->first()->content["application/json"]->type,
-        );
+        
+        $content = $successResponse['content'] ?? [];
+        $jsonContent = $content['application/json'] ?? null;
+        
+        if (!$jsonContent || !isset($jsonContent['schema'])) {
+            return [[], new StrictTs("any")];
+        }
+        
+        $schema = $jsonContent['schema'];
+        $references = [];
+        $type = $this->convertSchemaToTsType($schema, $references);
+        
+        return [$references, $type];
+    }
+    
+    protected function convertSchemaToTsType(array $schema, array &$references = []): TsType
+    {
+        if (empty($schema)) {
+            return new StrictTs("any");
+        }
+        
+        // Handle $ref
+        if (isset($schema['$ref'])) {
+            $ref = $schema['$ref'];
+            $components = $this->openApi['components']['schemas'] ?? [];
+            $refName = basename($ref);
+            
+            if (isset($components[$refName])) {
+                $references[$refName] = $this->convertSchemaToTsType($components[$refName], $references);
+                return new StrictTs($refName);
+            }
+        }
+        
+        // Handle type
+        $type = $schema['type'] ?? null;
+        
+        return match ($type) {
+            'string' => new StrictTs("string"),
+            'number', 'integer' => new StrictTs("number"),
+            'boolean' => new StrictTs("boolean"),
+            'array' => new ArrayTs(
+                $this->convertSchemaToTsType($schema['items'] ?? [], $references)
+            ),
+            'object' => new ObjectTs(
+                collect($schema['properties'] ?? [])->mapWithKeys(
+                    function ($property, $key) use (&$references) {
+                        return [
+                            $key => $this->convertSchemaToTsType($property, $references)
+                        ];
+                    }
+                )->toArray()
+            ),
+            default => new StrictTs("any"),
+        };
     }
 
-    public function generateTsFromScrambleType(Type $type): array
+    protected function getType(Type $type): TsType
     {
-        $references = [];
-        $ts = new StrictTs("any");
+        return match (true) {
+            $type instanceof StringType => new StrictTs("string"),
+            $type instanceof NumberType => new StrictTs("number"),
+            $type instanceof BooleanType => new StrictTs("boolean"),
+            $type instanceof ArrayType => new ArrayTs($this->getType($type->items)),
+            $type instanceof ObjectType => new ObjectTs(
+                collect($type->properties)->mapWithKeys(
+                    fn(Type $type, $key) => [
+                        $key => $this->getType($type),         
+                    ]
+                )->toArray()
+            ),
+            default => new StrictTs("any"),
+        };
+    }
 
-        if ($type instanceof Reference) {
-            [$refs, $nestedTs] = $this->generateTsFromScrambleType(
-                $type->resolve()->type,
-            );
-
-            $references = array_merge($references, $refs, [
-                $type->getUniqueName() => $nestedTs,
-            ]);
-
-            $ts = new StrictTs($type->getUniqueName());
-        } elseif ($type instanceof AnyOf) {
-            $ts = "";
-            $types = [];
-            foreach (invade($type)->items as $iType) {
-                [$refs, $nestedTs] = $this->generateTsFromScrambleType($iType);
-                $references = array_merge($references, $refs);
-                $types[] = $nestedTs;
-            }
-
-            $ts = new AnyofTs($types);
-        } elseif ($type instanceof ObjectType) {
-            $properties = [];
-            foreach ($type->properties as $field => $property) {
-                [$refs, $nestedTs] = $this->generateTsFromScrambleType($property);
-
-
-                $references = array_merge($references, $refs);
-
-                $properties[$field] = $nestedTs;
-            }
-
-            $ts = new ObjectTs($properties);
-        } elseif ($type instanceof ArrayType) {
-            [$refs, $nestedTs] = $this->generateTsFromScrambleType($type->items);
-
-            $references = array_merge($references, $refs);
-            $ts = new ArrayTs($nestedTs);
-        } elseif ($type instanceof UnknownType) {
-            $ts = new StrictTs("any");
-        } 
-         elseif ($type instanceof StringType) {
-            if (!empty($type->enum)) {
-                $ts = new AnyofTs(
-                    collect($type->enum)
-                        ->map(fn($e) => new StrictTs($e, true))
-                        ->toArray(),
-                );
-            } else {
-                $ts = new StrictTs("string");
-            }
-        } elseif ($type instanceof NumberType) {
-            $ts = new StrictTs("number");
-        } elseif ($type instanceof BooleanType) {
-            $ts = new StrictTs("boolean");
-        } elseif ($type instanceof NullType) {
-            $ts = new StrictTs("null");
-        } elseif ($type instanceof MixedType) {
-            $ts = new StrictTs("any");
-        } else {
-            throw new \Exception("Unknown type: " . get_class($type));
+    protected function collectReferences(?Type $type, array &$references): void
+    {
+        if (!$type) {
+            return;
         }
 
-        return [$references, $ts];
+        if ($type instanceof ObjectType) {
+            foreach ($type->properties as $property) {
+                $this->collectReferences($property, $references);
+            }
+        } elseif ($type instanceof ArrayType) {
+            $this->collectReferences($type->items, $references);
+        }
     }
 }

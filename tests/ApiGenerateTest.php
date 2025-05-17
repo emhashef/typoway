@@ -3,10 +3,23 @@
 namespace Emhashef\Typoway\Tests;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Routing\Controller;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\Concerns\HandlesRoutes;
+
+class UserResource extends JsonResource
+{
+    public function toArray(Request $request)
+    {
+        return [
+            'name' => 'Bob',
+            'age' => 123,
+            'permission' => ['store', 'update']
+        ];
+    }
+}
 
 class TestController extends Controller
 {
@@ -14,6 +27,7 @@ class TestController extends Controller
     {
         return [
             'name' => $request->name,
+            'user' => new UserResource(null)
         ];
     }
 
@@ -59,7 +73,12 @@ class ApiGenerateTest extends TestCase
         $this->assertFileExists(resource_path("js/routes.ts"));
 
         $this->assertStringContainsString(
-            "index: ( data?: {name?: any}, ): ApiResponse<{name?: string}> => request('get', urls.test.index( ), data)",
+            "index: ( data?: {name?: any}, ): ApiResponse<{name?: string;user?: UserResource}> => request('get', urls.test.index( ), data)",
+            file_get_contents(resource_path("js/routes.ts"))
+        );
+
+        $this->assertStringContainsString(
+            "export type UserResource = {name?: string;age?: number;permission?: any[]};",
             file_get_contents(resource_path("js/routes.ts"))
         );
     }

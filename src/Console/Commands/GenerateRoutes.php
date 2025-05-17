@@ -40,8 +40,9 @@ class GenerateRoutes extends Command
         InertiaGenerator $inertiaGenerator
     ){
         $routes = collect(Route::getRoutes())->filter(
-            fn($route) => $route->getName() &&
-                !str($route->getName())->is(config('typoway.except-routes', $this->exceptNames)),
+            fn(\Illuminate\Routing\Route $route) => $route->getName() &&
+                !str($route->getName())->is(config('typoway.except-routes', $this->exceptNames)) &&
+                is_array($route->action),
         );
 
         /** @var \Illuminate\Routing\Route $route */

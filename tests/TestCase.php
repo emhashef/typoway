@@ -18,4 +18,32 @@ class TestCase extends BaseTestCase
             ScrambleServiceProvider::class
         ];
     }
+
+    protected function getEnvironmentSetUp($app)
+    {
+        // Setup default database to use sqlite :memory:
+        $app['config']->set('database.default', 'testing');
+        $app['config']->set('database.connections.testing', [
+            'driver'   => 'sqlite',
+            'database' => ':memory:',
+            'prefix'   => '',
+        ]);
+
+        // Setup Scramble configuration
+        $app['config']->set('scramble', [
+            'context' => [
+                'info' => [
+                    'title' => 'API Documentation',
+                    'version' => '1.0.0',
+                ],
+            ],
+            'servers' => null,
+            'extensions' => [],
+            'security' => [],
+            'auth' => [],
+            'examples' => [
+                'faker_seed' => null,
+            ],
+        ]);
+    }
 }

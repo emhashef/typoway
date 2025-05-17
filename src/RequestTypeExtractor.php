@@ -2,6 +2,7 @@
 
 namespace Emhashef\Typoway;
 
+use Dedoc\Scramble\Generator;
 use Dedoc\Scramble\Support\Generator\Parameter;
 use Dedoc\Scramble\Support\Generator\Types\ArrayType;
 use Dedoc\Scramble\Support\Generator\Types\NumberType;
@@ -25,43 +26,76 @@ use ReflectionClass;
 
 class RequestTypeExtractor
 {
-    public function __construct(protected TypeTransformer $typeTransformer) {}
+    protected array $openApi;
+
+    public function __construct(protected Generator $scrambleGenerator) {}
 
     public function extract(Route $route): TsType
     {
         return new ObjectTs([
             ...$this->extractAccessedRequestProperties($route),
-            ...$this->extractParamsFromScramble(app(RouteInfo::class, ["route" => $route])),
+            ...$this->extractParamsFromScramble($route),
         ]);
     }
 
-    protected function extractParamsFromScramble(RouteInfo $route): array
+    protected function extractParamsFromScramble(Route $route): array
     {
-        if (!$route->isClassBased()) {
+        $this->openApi ??= $this->scrambleGenerator->__invoke();
+        
+        $path = (string) str(ltrim($route->uri(), '/'))->replaceFirst(ltrim(config('scramble.api_path', 'api'), '/'), '')->ltrim('/')->prepend('/');
+        $method = strtolower($route->methods()[0]);
+        
+        if (!isset($this->openApi['paths'][$path][$method])) {
             return [];
         }
+        
+        $operation = $this->openApi['paths'][$path][$method];
+        $result = [];
 
-        $typeDefiningHandlers = [
-            new FormRequestRulesExtractor($route->methodNode(), $this->typeTransformer),
-            new ValidateCallExtractor($route->methodNode(), $this->typeTransformer),
-            new RequestMethodCallsExtractor(),
-        ];
+        // Handle path and query parameters
+        $parameters = $operation['parameters'] ?? [];
+        foreach ($parameters as $parameter) {
+            $name = $parameter['name'];
+            $schema = $parameter['schema'] ?? [];
+            $result[$name] = $this->convertSchemaToTsType($schema);
+        }
 
-        $params = collect($typeDefiningHandlers)
-            ->filter(fn($h) => $h->shouldHandle())
-            ->map(fn($h) => $h->extract($route))
-            ->values()
-            ->map(fn($r) => $r->parameters)
-            ->flatten();
-
-        $params = collect((new DeepParametersMerger($params))->handle());
-
-        return $params->mapWithKeys(
-                fn(Parameter $result) => [
-                    $result->name => $this->getType($result->schema->type),
-                ],
-            )
-            ->toArray();
+        // Handle request body parameters
+        if (isset($operation['requestBody']['content']['application/json']['schema'])) {
+            $schema = $operation['requestBody']['content']['application/json']['schema'];
+            if ($schema['type'] === 'object' && isset($schema['properties'])) {
+                foreach ($schema['properties'] as $name => $property) {
+                    $result[$name] = $this->convertSchemaToTsType($property);
+                }
+            }
+        }
+        
+        return $result;
+    }
+    
+    protected function convertSchemaToTsType(array $schema): TsType
+    {
+        if (empty($schema)) {
+            return new StrictTs("any");
+        }
+        
+        $type = $schema['type'] ?? null;
+        
+        return match ($type) {
+            'string' => new StrictTs("string"),
+            'number', 'integer' => new StrictTs("number"),
+            'array' => new ArrayTs(
+                $this->convertSchemaToTsType($schema['items'] ?? [])
+            ),
+            'object' => new ObjectTs(
+                collect($schema['properties'] ?? [])->mapWithKeys(
+                    fn ($property, $key) => [
+                        $key => $this->convertSchemaToTsType($property)
+                    ]
+                )->toArray()
+            ),
+            default => new StrictTs("any"),
+        };
     }
 
     protected function getType(Type $type)
