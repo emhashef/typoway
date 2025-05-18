@@ -20,11 +20,11 @@ class ResponseTypeExtractor
 {
     protected array $openApi;
 
-    public function __construct(protected Generator $scrambleGenerator) {}
+    public function __construct(protected OpenApiGenerator $openApiGenerator) {}
 
     public function extract(Route $route): array
     {
-        $this->openApi ??= $this->scrambleGenerator->__invoke();
+        $this->openApi ??= $this->openApiGenerator->__invoke();
 
         $path = (string) str(ltrim($route->uri(), '/'))->replaceFirst(ltrim(config('scramble.api_path', 'api'), '/'), '')->ltrim('/')->prepend('/');
         $method = strtolower($route->methods()[0]);

@@ -10,6 +10,11 @@ use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 
 class ServiceProvider extends BaseServiceProvider
 {
+    public function register()
+    {
+        $this->app->singleton(OpenApiGenerator::class);
+    }
+
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
