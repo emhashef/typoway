@@ -23,9 +23,10 @@ class UserResource extends JsonResource
 
 class TestController extends Controller
 {
-    public function index(Request $request )
+    public function index(Request $request, string $userId)
     {
         return [
+            'id' => $userId,
             'name' => $request->name,
             'user' => new UserResource(null)
         ];
@@ -53,7 +54,8 @@ class ApiGenerateTest extends TestCase
 {
     public function defineRoutes($router)
     {
-        $router->get('/api/test', [TestController::class, 'index'])->name('test.index');
+        $router->get('/api/test/{userId}', [TestController::class, 'index'])->name('test.index');
+
         $router->get('/api/without-name', [TestController::class, 'index']);
 
         $router->post('/api/store-array', [TestController::class, 'storeArray'])->name('test.storeArray');
@@ -73,13 +75,18 @@ class ApiGenerateTest extends TestCase
         $this->assertFileExists(resource_path("js/routes.ts"));
 
         $this->assertStringContainsString(
-            "index: ( data?: {name?: any}, ): ApiResponse<{name?: string;user?: UserResource}> => request('get', urls.test.index( ), data)",
+            "index: (userId: string, data?: {name?: any;userId?: string}, ): ApiResponse<{id?: string;name?: string;user?: UserResource}> => request('get', urls.test.index(userId, ), data)",
             file_get_contents(resource_path("js/routes.ts"))
         );
 
         $this->assertStringContainsString(
             "export type UserResource = {name?: string;age?: number;permission?: any[]};",
             file_get_contents(resource_path("js/routes.ts"))
+        );
+
+        $this->assertStringContainsString(
+            'index: (userId?: string) => `/api/test/${userId ?? _default(\'userId\')}`',
+            file_get_contents(resource_path('js/routes.ts'))
         );
     }
 
