@@ -39,7 +39,7 @@ class Utils
     public function getParameters(Route $route)
     {
         return str($route->uri())
-            ->matchAll("/\{(\w+?)\?\}/")
+            ->matchAll("/\{(\w+?)\??\}/")
             ->map(
                 fn($parameter) => (string) str($parameter)
                     ->replace("export", "_export")
