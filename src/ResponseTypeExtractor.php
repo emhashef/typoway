@@ -2,14 +2,14 @@
 
 namespace Emhashef\Typoway;
 
-use Dedoc\Scramble\Generator;
-use Dedoc\Scramble\Scramble;
+
 use Dedoc\Scramble\Support\Generator\Types\ArrayType;
 use Dedoc\Scramble\Support\Generator\Types\BooleanType;
 use Dedoc\Scramble\Support\Generator\Types\NumberType;
 use Dedoc\Scramble\Support\Generator\Types\ObjectType;
 use Dedoc\Scramble\Support\Generator\Types\StringType;
 use Dedoc\Scramble\Support\Generator\Types\Type;
+use Emhashef\Typoway\Support\TsTypes\AnyofTs;
 use Emhashef\Typoway\Support\TsTypes\ArrayTs;
 use Emhashef\Typoway\Support\TsTypes\ObjectTs;
 use Emhashef\Typoway\Support\TsTypes\StrictTs;
@@ -72,6 +72,40 @@ class ResponseTypeExtractor
                 $references[$refName] = $this->convertSchemaToTsType($components[$refName], $references);
                 return new StrictTs($refName);
             }
+        }
+
+        // Handle anyOf, allOf, oneOf
+        if (isset($schema['anyOf'])) {
+            $types = array_map(
+                function($subSchema) use(&$references){
+                    return $this->convertSchemaToTsType($subSchema, $references);
+                },
+                $schema['anyOf']
+            );
+            // For anyOf, we'll use a union type
+            return new AnyofTs($types); // TODO: Implement proper union type handling
+        }
+
+        if (isset($schema['allOf'])) {
+            $types = array_map(
+                function($subSchema) use(&$references){
+                    return $this->convertSchemaToTsType($subSchema, $references);
+                },
+                $schema['allOf']
+            );
+            // For allOf, we'll use an intersection type
+            return new AnyofTs($types); // TODO: Implement proper intersection type handling
+        }
+
+        if (isset($schema['oneOf'])) {
+            $types = array_map(
+                function($subSchema) use(&$references){
+                    return $this->convertSchemaToTsType($subSchema, $references);
+                },
+                $schema['oneOf']
+            );
+            // For oneOf, we'll use a union type
+            return new AnyofTs($types); // TODO: Implement proper union type handling
         }
         
         // Handle type
