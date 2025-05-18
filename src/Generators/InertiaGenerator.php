@@ -61,7 +61,7 @@ class InertiaGenerator implements GeneratorInterface
                     collect($args = $this->utils->getParameters($route))
                         ->map(
                             fn($name) => (string) str($name)->append(
-                                "?: string|$reqTypeRef|FormOptions",
+                                "?: string|number|$reqTypeRef|FormOptions",
                             ),
                         )
                         ->join(",") . ($args ? "," : ""),

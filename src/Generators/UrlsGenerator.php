@@ -31,7 +31,7 @@ class UrlsGenerator implements GeneratorInterface
                     join(
                         ", ",
                         array_map(
-                            fn($param) => "$param?: string",
+                            fn($param) => "$param?: string | number",
                             $this->utils->getParameters($route),
                         ),
                     ),
