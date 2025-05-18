@@ -63,7 +63,7 @@ class RequestTypeExtractor
         // Handle request body parameters
         if (isset($operation['requestBody']['content']['application/json']['schema'])) {
             $schema = $operation['requestBody']['content']['application/json']['schema'];
-            if ($schema['type'] === 'object' && isset($schema['properties'])) {
+            if (($schema['type'] ?? '') === 'object' && isset($schema['properties'])) {
                 foreach ($schema['properties'] as $name => $property) {
                     $result[$name] = $this->convertSchemaToTsType($property);
                 }
@@ -144,7 +144,7 @@ class RequestTypeExtractor
         $result = [];
         foreach ($params as $param) {
             if (
-                $param->getType() &&
+                $param->getType() && class_exists($param->getType()->getName()) &&
                 (get_parent_class($param->getType()->getName()) === FormRequest::class ||
                     $param->getType()->getName() === Request::class)
             ) {
